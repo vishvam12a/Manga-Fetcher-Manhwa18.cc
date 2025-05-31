@@ -61,37 +61,26 @@ async function fetchAndParseMangaPage(sanitizedMangaName: string, chapterNumber:
       if (response.status === 404) {
         return [];
       }
-      // For ranges, we might want to not throw but return empty and let the caller decide
-      // For now, this behavior is fine as the loop in getMangaChapterImages will catch and continue.
-      // throw new Error(`Failed to fetch manga page: ${response.status} ${response.statusText}`);
-      return []; // Return empty on error for this specific chapter to allow range processing to continue
+      return [];
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
     const images: ScrapedImage[] = [];
 
-    let imageElements = $('img.loading[data-src]');
-
+    let imageElements = $('img.loading[data-src], img.loading[src]');
     if (imageElements.length === 0) {
-      imageElements = $('img.loading[src]');
+      imageElements = $('img.wp-manga-chapter-img[data-src], img.wp-manga-chapter-img[src]');
     }
     if (imageElements.length === 0) {
-      imageElements = $('img.wp-manga-chapter-img[data-src]');
+        imageElements = $('.reading-content img[data-src], .entry-content img[data-src], #readerarea img[data-src], div.container-chapter-reader img[data-src], .reading-content img[src], .entry-content img[src], #readerarea img[src], div.container-chapter-reader img[src]');
     }
     if (imageElements.length === 0) {
-      imageElements = $('img.wp-manga-chapter-img[src]');
-    }
-    if (imageElements.length === 0) {
-        imageElements = $('.reading-content img[data-src], .entry-content img[data-src], #readerarea img[data-src], div.container-chapter-reader img[data-src]');
-    }
-    if (imageElements.length === 0) {
-        imageElements = $('.reading-content img[src], .entry-content img[src], #readerarea img[src], div.container-chapter-reader img[src]');
-    }
-    if (imageElements.length === 0) {
-      $('img[data-src], img[src]').each((index, element) => {
-        const src = $(element).attr('data-src') || $(element).attr('src');
-        if (src && (src.includes('/uploads/') || src.includes('/chapter') || src.includes('/manga'))) {
+      $('img[data-src], img[src]').each((_index, element) => {
+        const dataSrc = $(element).attr('data-src');
+        const srcAttr = $(element).attr('src');
+        const checkSrc = dataSrc || srcAttr;
+        if (checkSrc && (checkSrc.includes('/uploads/') || checkSrc.includes('/chapter') || checkSrc.includes('/manga'))) {
             if(!imageElements.is(element)) {
               imageElements = imageElements.add(element);
             }
@@ -100,60 +89,76 @@ async function fetchAndParseMangaPage(sanitizedMangaName: string, chapterNumber:
     }
 
     imageElements.each((index, element) => {
-      let imageUrl = $(element).attr('data-src') || $(element).attr('src');
-      if (imageUrl) {
-        imageUrl = imageUrl.trim();
-        if (imageUrl.startsWith('//')) {
-          imageUrl = `https:${imageUrl}`;
-        } else if (imageUrl.startsWith('/')) {
-            try {
-                const siteUrl = new URL(url);
-                imageUrl = `${siteUrl.protocol}//${siteUrl.hostname}${imageUrl}`;
-            } catch (e) {
-                console.warn(`Could not form absolute URL from relative path: ${imageUrl} using base ${url}`);
-                return;
-            }
-        }
+      const potentialDataSrc = $(element).attr('data-src')?.trim();
+      const potentialSrc = $(element).attr('src')?.trim();
+      let imageUrl: string | undefined;
 
-        try {
-            new URL(imageUrl);
-        } catch (e) {
-            console.warn(`Invalid image URL found: ${imageUrl}`);
-            return;
-        }
+      const looksLikeHttpOrRelativeUrl = (s?: string): boolean => {
+        if (!s) return false;
+        return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('//') || s.startsWith('/');
+      };
 
-        let extension = '.jpg';
-        try {
-          const parsedUrl = new URL(imageUrl);
-          const pathname = parsedUrl.pathname;
-          const lastSegment = pathname.substring(pathname.lastIndexOf('/') + 1);
-          if (lastSegment.includes('.')) {
-            const extCandidate = lastSegment.substring(lastSegment.lastIndexOf('.')).toLowerCase();
-            if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(extCandidate)) {
-              extension = extCandidate;
-            }
-          }
-        } catch (e) {
-          console.warn(`Could not parse image URL for extension: ${imageUrl}, using default .jpg`);
-        }
-
-        images.push({
-          url: imageUrl,
-          name: `${sanitizedMangaName}_chapter_${chapterNumber}_page_${index + 1}${extension}`,
-          mangaName: sanitizedMangaName,
-          chapterNumber: chapterNumber,
-        });
+      if (potentialDataSrc && looksLikeHttpOrRelativeUrl(potentialDataSrc)) {
+        imageUrl = potentialDataSrc;
+      } else if (potentialSrc && looksLikeHttpOrRelativeUrl(potentialSrc)) {
+        imageUrl = potentialSrc;
+      } else if (potentialDataSrc) {
+        imageUrl = potentialDataSrc;
+      } else if (potentialSrc) {
+        imageUrl = potentialSrc;
+      } else {
+        return; 
       }
+
+      if (imageUrl.startsWith('//')) {
+        imageUrl = `https:${imageUrl}`;
+      } else if (imageUrl.startsWith('/')) {
+          try {
+              const pageUrl = new URL(url);
+              imageUrl = `${pageUrl.protocol}//${pageUrl.hostname}${imageUrl}`;
+          } catch (e) {
+              console.warn(`Could not form absolute URL from relative path: '${imageUrl}' using base '${url}'. data-src: '${potentialDataSrc}', src: '${potentialSrc}'. Error: ${e instanceof Error ? e.message : String(e)}`);
+              return;
+          }
+      }
+
+      try {
+          new URL(imageUrl);
+      } catch (e) {
+          console.warn(`Invalid or unusable image URL after processing: '${imageUrl}'. Original data-src: '${potentialDataSrc}', original src: '${potentialSrc}'. Error: ${e instanceof Error ? e.message : String(e)}`);
+          return;
+      }
+
+      let extension = '.jpg';
+      try {
+        const parsedUrl = new URL(imageUrl);
+        const pathname = parsedUrl.pathname;
+        const lastSegment = pathname.substring(pathname.lastIndexOf('/') + 1);
+        if (lastSegment.includes('.')) {
+          const extCandidate = lastSegment.substring(lastSegment.lastIndexOf('.')).toLowerCase();
+          if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(extCandidate)) {
+            extension = extCandidate;
+          }
+        }
+      } catch (e) {
+        console.warn(`Could not parse image URL for extension: ${imageUrl}, using default .jpg`);
+      }
+
+      images.push({
+        url: imageUrl,
+        name: `${sanitizedMangaName}_chapter_${chapterNumber}_page_${index + 1}${extension}`,
+        mangaName: sanitizedMangaName,
+        chapterNumber: chapterNumber,
+      });
     });
 
     if (images.length === 0) {
-        console.log(`No images found on ${url} matching any of the specified selectors.`);
+        console.log(`No images found on ${url} matching any of the specified selectors or criteria.`);
     }
     return images;
 
   } catch (error) {
     console.error(`Error in fetchAndParseMangaPage for ${url}:`, error);
-    // Return empty array to allow the loop to continue for chapter ranges
     return [];
   }
 }
@@ -215,12 +220,9 @@ export async function getMangaChapterImages(
           allImages = allImages.concat(chapterImages);
           successfulChaptersCount++;
         } else {
-          // Optional: if you want to inform about chapters that yielded no images specifically
-          // For now, we just note that no images were found if allImages remains empty.
            console.log(`No images found for chapter ${currentChapter} at ${constructedUrl}`);
         }
       } catch (e: any) {
-        // This catch is if fetchAndParseMangaPage itself throws, though we modified it to return [] on error
         console.error(`Critical error fetching or parsing chapter ${currentChapter}: ${e.message}`);
         chapterFetchErrors.push(`Chapter ${currentChapter}: ${e.message}`);
       }
@@ -268,5 +270,3 @@ export async function getMangaChapterImages(
     };
   }
 }
-
-    

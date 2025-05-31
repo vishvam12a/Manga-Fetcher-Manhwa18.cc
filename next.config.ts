@@ -23,10 +23,21 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // Add other CDNs if manhwa18.cc uses more
       {
-        protocol: 'http', // Some CDNs might use http
+        protocol: 'http',
         hostname: 'cdn01.manhwa18.cc',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn02.manhwa18.cc',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'cdn02.manhwa18.cc',
         port: '',
         pathname: '/**',
       }
