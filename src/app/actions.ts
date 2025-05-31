@@ -1,6 +1,8 @@
+
 "use server";
 
 import { z } from "zod";
+import * as cheerio from 'cheerio';
 
 const FormSchema = z.object({
   mangaName: z.string().min(1, "Manga name is required."),
@@ -11,7 +13,7 @@ const FormSchema = z.object({
 
 export interface ScrapedImage {
   url: string;
-  name: string; // e.g., page_1.jpg
+  name: string;
 }
 
 export interface ScrapeResult {
@@ -22,35 +24,120 @@ export interface ScrapeResult {
   constructedUrl?: string;
 }
 
-// Simulate fetching and parsing. In a real scenario, this would involve HTTP requests and HTML parsing.
 async function fetchAndParseMangaPage(url: string): Promise<ScrapedImage[]> {
-  console.log(`Simulating scraping for URL: ${url}`);
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
-
-  // Simulate finding images. Let's say we find 5-15 images.
-  const numImages = Math.floor(Math.random() * 11) + 5; // 5 to 15 images
-  const images: ScrapedImage[] = [];
-
-  // Special case for testing "not found" or errors
-  if (url.includes("example-manga-not-found")) {
-      return [];
-  }
-  if (url.includes("example-manga-fetch-error")) {
-    throw new Error("Simulated network error fetching manga page.");
-  }
-
-  for (let i = 1; i <= numImages; i++) {
-    // Generate placeholder image URLs
-    const width = Math.floor(Math.random() * 200) + 700; // 700-900
-    const height = Math.floor(Math.random() * 400) + 1000; // 1000-1400
-    images.push({
-      url: `https://placehold.co/${width}x${height}.png`,
-      name: `page_${i}.png`,
+  try {
+    console.log(`Fetching HTML from URL: ${url}`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      },
+      // It's possible the site blocks requests without more specific headers or has bot detection.
+      // Adding a timeout could also be useful for production scenarios.
     });
+
+    if (!response.ok) {
+      console.error(`HTTP error ${response.status} fetching ${url}`);
+      if (response.status === 404) {
+        return []; 
+      }
+      throw new Error(`Failed to fetch manga page: ${response.status} ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const images: ScrapedImage[] = [];
+    
+    let imageElements = $('img.loading[data-src]');
+
+    if (imageElements.length === 0) {
+      imageElements = $('img.loading[src]');
+    }
+    if (imageElements.length === 0) {
+      imageElements = $('img.wp-manga-chapter-img[data-src]');
+    }
+    if (imageElements.length === 0) {
+      imageElements = $('img.wp-manga-chapter-img[src]');
+    }
+    if (imageElements.length === 0) {
+        imageElements = $('.reading-content img[data-src], .entry-content img[data-src], #readerarea img[data-src], div.container-chapter-reader img[data-src]');
+    }
+    if (imageElements.length === 0) {
+        imageElements = $('.reading-content img[src], .entry-content img[src], #readerarea img[src], div.container-chapter-reader img[src]');
+    }
+    // Final fallback: any image with data-src or src that looks like a chapter image based on path
+    if (imageElements.length === 0) {
+      $('img[data-src], img[src]').each((index, element) => {
+        const src = $(element).attr('data-src') || $(element).attr('src');
+        if (src && (src.includes('/uploads/') || src.includes('/chapter') || src.includes('/manga'))) {
+            // Heuristic: If image src contains common paths for manga images, add it.
+            // This is a bit broad and might need refinement.
+            if(!imageElements.is(element)) { // Avoid adding duplicates if already found by previous selectors
+              imageElements = imageElements.add(element);
+            }
+        }
+      });
+    }
+
+
+    imageElements.each((index, element) => {
+      let imageUrl = $(element).attr('data-src') || $(element).attr('src');
+      if (imageUrl) {
+        imageUrl = imageUrl.trim();
+        if (imageUrl.startsWith('//')) {
+          imageUrl = `https:${imageUrl}`;
+        } else if (imageUrl.startsWith('/')) {
+            try {
+                const siteUrl = new URL(url);
+                imageUrl = `${siteUrl.protocol}//${siteUrl.hostname}${imageUrl}`;
+            } catch (e) {
+                console.warn(`Could not form absolute URL from relative path: ${imageUrl} using base ${url}`);
+                return; // Skip this image if URL construction fails
+            }
+        }
+        
+        // Validate URL before proceeding
+        try {
+            new URL(imageUrl);
+        } catch (e) {
+            console.warn(`Invalid image URL found: ${imageUrl}`);
+            return; // Skip invalid URL
+        }
+
+        let extension = '.jpg'; // Default extension
+        try {
+          const parsedUrl = new URL(imageUrl);
+          const pathname = parsedUrl.pathname;
+          const lastSegment = pathname.substring(pathname.lastIndexOf('/') + 1);
+          if (lastSegment.includes('.')) {
+            const extCandidate = lastSegment.substring(lastSegment.lastIndexOf('.')).toLowerCase();
+            if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(extCandidate)) {
+              extension = extCandidate;
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not parse image URL for extension: ${imageUrl}, using default .jpg`);
+        }
+        
+        images.push({
+          url: imageUrl,
+          name: `page_${index + 1}${extension}`,
+        });
+      }
+    });
+
+    if (images.length === 0) {
+        console.log(`No images found on ${url} matching any of the specified selectors.`);
+    }
+
+    return images;
+
+  } catch (error) {
+    console.error(`Error in fetchAndParseMangaPage for ${url}:`, error);
+    if (error instanceof Error) {
+        throw new Error(`Scraping failed for ${url}: ${error.message}`);
+    }
+    throw new Error(`An unknown error occurred during scraping of ${url}`);
   }
-  
-  return images;
 }
 
 export async function getMangaChapterImages(
@@ -63,7 +150,6 @@ export async function getMangaChapterImages(
   });
 
   if (!validatedFields.success) {
-    // Extracting a more user-friendly error message
     const errors = validatedFields.error.flatten().fieldErrors;
     let errorMessage = "Invalid input: ";
     if (errors.mangaName) errorMessage += `Manga Name: ${errors.mangaName.join(', ')}. `;
@@ -77,7 +163,6 @@ export async function getMangaChapterImages(
 
   const { mangaName, chapterNumber } = validatedFields.data;
 
-  // Basic sanitization for mangaName: lowercase, replace spaces with hyphens, remove non-alphanumeric except hyphens.
   const sanitizedMangaName = mangaName
     .trim()
     .toLowerCase()
@@ -92,7 +177,7 @@ export async function getMangaChapterImages(
     if (images.length === 0) {
       return {
         success: false,
-        error: "No images found. The manga/chapter might not exist, or the page has no images.",
+        error: "No images found. The manga/chapter might not exist, the page has no images, or the scraper couldn't identify them. Check the console for more details.",
         constructedUrl,
       };
     }
@@ -104,7 +189,7 @@ export async function getMangaChapterImages(
       constructedUrl,
     };
   } catch (error) {
-    console.error("Scraping error:", error);
+    console.error("Scraping error in getMangaChapterImages:", error);
     let errorMessage = "An unexpected error occurred while fetching images.";
     if (error instanceof Error) {
         errorMessage = error.message;

@@ -1,8 +1,9 @@
+
 "use client";
 
-import { useEffect, useState, useActionState } from "react"; // Changed from react-dom
+import { useEffect, useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import NextImage from "next/image"; // Renamed to avoid conflict with Lucide icon
+import NextImage from "next/image";
 import { getMangaChapterImages, type ScrapeResult, type ScrapedImage } from "@/app/actions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,16 +33,15 @@ function SubmitButton() {
 }
 
 export function MangaDownloaderForm() {
-  const [state, formAction] = useActionState(getMangaChapterImages, initialState); // Changed from useFormState
+  const [state, formAction] = useActionState(getMangaChapterImages, initialState);
   const [displayedImages, setDisplayedImages] = useState<ScrapedImage[]>([]);
 
   useEffect(() => {
     if (state?.success && state.images) {
       setDisplayedImages(state.images);
-    } else if (state && !state.success) { // Clear images on error
+    } else if (state && !state.success) {
       setDisplayedImages([]);
     }
-    // Do not clear on initial undefined state
   }, [state]);
 
   return (
@@ -63,7 +63,7 @@ export function MangaDownloaderForm() {
               id="mangaName"
               name="mangaName"
               type="text"
-              placeholder="e.g., solo-leveling or example-manga-not-found"
+              placeholder="e.g., solo-leveling"
               required
               className="bg-input border-border placeholder:text-muted-foreground text-foreground focus:ring-ring"
             />
@@ -101,7 +101,7 @@ export function MangaDownloaderForm() {
 
       {displayedImages.length > 0 && (
         <CardFooter className="flex flex-col items-center mt-6 pt-6 border-t border-border">
-          <h3 className="text-xl font-headline mb-4 text-foreground">Fetched Images:</h3>
+          <h3 className="text-xl font-headline mb-4 text-foreground">Fetched Images ({displayedImages.length}):</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
             {displayedImages.map((image, index) => (
               <Card key={index} className="overflow-hidden bg-secondary shadow-md">
@@ -112,11 +112,12 @@ export function MangaDownloaderForm() {
                   <NextImage
                     src={image.url}
                     alt={image.name}
-                    width={300}
-                    height={450}
+                    width={300} // Intrinsic width could be used if available, or a larger default
+                    height={450} // Intrinsic height could be used if available, or a larger default
                     className="object-contain w-full h-full"
                     data-ai-hint="manga comic"
-                    unoptimized={image.url.startsWith('https://placehold.co')}
+                    // unoptimized={true} // Can be set to true if optimization causes issues or is not desired for external CDNs
+                    // If Next.js image optimization is not working for cdn01.manhwa18.cc, uncomment above line
                   />
                    <a
                     href={image.url}
@@ -134,7 +135,7 @@ export function MangaDownloaderForm() {
           </div>
         </CardFooter>
       )}
-      {!state?.images && (!state || state?.success === undefined || (state?.success === false && !displayedImages.length)) && ( // Show initial hint or if no images and not a success state
+      {!state?.images && (!state || state?.success === undefined || (state?.success === false && !displayedImages.length)) && (
         <CardFooter className="flex flex-col items-center justify-center py-10 text-muted-foreground">
             <ImageIcon size={48} className="mb-2" />
             <p>Enter manga details above to see images here.</p>
