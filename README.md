@@ -27,7 +27,6 @@
 | **Tailwind CSS**      | Design like a pro, without writing a ton of CSS |
 | **Lucide Icons**      | Sleek icons with zero clutter                   |
 | **Cheerio**           | Lightweight scraping wizard                     |
-| **Genkit + Firebase** | AI potential, waiting to be unleashed 🔮        |
 
 ---
 
