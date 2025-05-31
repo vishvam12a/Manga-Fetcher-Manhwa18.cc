@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useState, useActionState } from "react"; // Changed from react-dom
+import { useFormStatus } from "react-dom";
 import NextImage from "next/image"; // Renamed to avoid conflict with Lucide icon
 import { getMangaChapterImages, type ScrapeResult, type ScrapedImage } from "@/app/actions";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,7 @@ function SubmitButton() {
 }
 
 export function MangaDownloaderForm() {
-  const [state, formAction] = useFormState(getMangaChapterImages, initialState);
+  const [state, formAction] = useActionState(getMangaChapterImages, initialState); // Changed from useFormState
   const [displayedImages, setDisplayedImages] = useState<ScrapedImage[]>([]);
 
   useEffect(() => {
