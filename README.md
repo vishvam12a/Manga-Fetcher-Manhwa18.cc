@@ -72,8 +72,6 @@ This application relies on web scraping to fetch manga images from external webs
 
 ## Contributing
 
-Currently, contributions are handled internally. As the project evolves, guidelines for external contributions may be established.
+Feel Free To Contribute
 
-## License
 
-This project is proprietary.
