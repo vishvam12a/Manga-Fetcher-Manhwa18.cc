@@ -49,9 +49,14 @@ export function MangaDownloaderForm() {
       <CardHeader>
         <CardTitle className="text-3xl font-headline text-center text-primary">Manga Chapter Downloader</CardTitle>
         <CardDescription className="text-center text-muted-foreground">
-          Enter the manga name and chapter number to fetch images.
+          Enter the manga name and chapter(s) to fetch images.
           {state?.constructedUrl && (
-            <p className="text-xs mt-1">Attempted URL: <a href={state.constructedUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{state.constructedUrl}</a></p>
+             <p className="text-xs mt-1">
+              {state.constructedUrl.startsWith("http")
+                ? <>Attempted URL: <a href={state.constructedUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{state.constructedUrl}</a></>
+                : <>Attempted: {state.constructedUrl}</>
+              }
+            </p>
           )}
         </CardDescription>
       </CardHeader>
@@ -68,17 +73,30 @@ export function MangaDownloaderForm() {
               className="bg-input border-border placeholder:text-muted-foreground text-foreground focus:ring-ring"
             />
           </div>
-          <div className="space-y-2">
-            <label htmlFor="chapterNumber" className="block text-sm font-medium text-foreground">Chapter Number</label>
-            <Input
-              id="chapterNumber"
-              name="chapterNumber"
-              type="number"
-              placeholder="e.g., 123"
-              required
-              min="1"
-              className="bg-input border-border placeholder:text-muted-foreground text-foreground focus:ring-ring"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="startChapterNumber" className="block text-sm font-medium text-foreground">Start Chapter</label>
+              <Input
+                id="startChapterNumber"
+                name="startChapterNumber"
+                type="number"
+                placeholder="e.g., 123"
+                required
+                min="1"
+                className="bg-input border-border placeholder:text-muted-foreground text-foreground focus:ring-ring"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="endChapterNumber" className="block text-sm font-medium text-foreground">End Chapter (Optional)</label>
+              <Input
+                id="endChapterNumber"
+                name="endChapterNumber"
+                type="number"
+                placeholder="e.g., 125"
+                min="1"
+                className="bg-input border-border placeholder:text-muted-foreground text-foreground focus:ring-ring"
+              />
+            </div>
           </div>
           <SubmitButton />
         </form>
@@ -104,20 +122,20 @@ export function MangaDownloaderForm() {
           <h3 className="text-xl font-headline mb-4 text-foreground">Fetched Images ({displayedImages.length}):</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
             {displayedImages.map((image, index) => (
-              <Card key={index} className="overflow-hidden bg-secondary shadow-md">
+              <Card key={`${image.mangaName}-${image.chapterNumber}-${image.name}-${index}`} className="overflow-hidden bg-secondary shadow-md">
                 <CardHeader className="p-3 text-center border-b border-border">
-                  <CardTitle className="text-sm font-medium text-secondary-foreground truncate">{image.name}</CardTitle>
+                  <CardTitle className="text-sm font-medium text-secondary-foreground truncate" title={image.name}>
+                    {image.name}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 aspect-[2/3] relative bg-muted flex items-center justify-center">
                   <NextImage
                     src={image.url}
                     alt={image.name}
-                    width={300} // Intrinsic width could be used if available, or a larger default
-                    height={450} // Intrinsic height could be used if available, or a larger default
+                    width={300} 
+                    height={450} 
                     className="object-contain w-full h-full"
                     data-ai-hint="manga comic"
-                    // unoptimized={true} // Can be set to true if optimization causes issues or is not desired for external CDNs
-                    // If Next.js image optimization is not working for cdn01.manhwa18.cc, uncomment above line
                   />
                    <a
                     href={image.url}
@@ -144,3 +162,5 @@ export function MangaDownloaderForm() {
     </Card>
   );
 }
+
+    
